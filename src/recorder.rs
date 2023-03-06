@@ -3,6 +3,7 @@ use chrono::{DateTime, Duration, Utc};
 use derive_builder::Builder;
 use spin_sdk::http::Request;
 use spin_sdk::key_value::Store;
+use std::collections::HashMap;
 
 const TOTAL_REQUESTS: &str = "total_requests";
 const TOTAL_SUCCESSFUL: &str = "total_successful";
@@ -93,6 +94,7 @@ pub fn collect_metric(record: &Record) -> Result<()> {
 
     increment_total_count(&store)?;
     increment_response_type(&store, &record)?;
+    store_response_time_metric(&store, record)?;
     Ok(())
 }
 
@@ -102,7 +104,6 @@ pub fn store_response_time_metric(store: &Store, record: &Record) -> Result<()> 
     let mut response_times_ms_vec: Vec<i64> = serde_json::from_str(raw_str).unwrap();
 
     response_times_ms_vec.push(record.execution_time.num_milliseconds());
-    response_times_ms_vec.sort();
     let raw_str = serde_json::to_string(&response_times_ms_vec)?;
 
     store
@@ -141,4 +142,40 @@ pub fn increment_key(store: &Store, key: impl AsRef<str>) -> Result<()> {
     store
         .set(key, format!("{}", count + 1))
         .map_err(anyhow::Error::msg)
+}
+
+// getters
+pub fn get_analytics_data(store: &Store) -> Result<HashMap<&str, i64>> {
+    let mut data: HashMap<&str, i64> = HashMap::new();
+    data.insert(TOTAL_SUCCESSFUL, get_i64(store, TOTAL_SUCCESSFUL).unwrap());
+    data.insert(
+        TOTAL_AUTH_N_ERROR,
+        get_i64(store, TOTAL_AUTH_N_ERROR).unwrap(),
+    );
+    data.insert(
+        TOTAL_AUTH_Z_ERROR,
+        get_i64(store, TOTAL_AUTH_Z_ERROR).unwrap(),
+    );
+    data.insert(
+        TOTAL_SERVER_ERROR,
+        get_i64(store, TOTAL_SERVER_ERROR).unwrap(),
+    );
+
+    Ok(data)
+}
+
+pub fn get_p95(store: &Store) -> Result<i64> {
+    get_i64(store, PERCENTILE_P95)
+}
+
+pub fn get_i64(store: &Store, key: impl AsRef<str>) -> Result<i64> {
+    let raw = store.get(key).unwrap_or_default();
+    let raw_str = std::str::from_utf8(&raw).unwrap_or("-1");
+    raw_str.parse().map_err(anyhow::Error::msg)
+}
+
+pub fn get_response_time_metric(store: &Store) -> Result<Vec<i64>> {
+    let raw = store.get(LAST_N_SUCCESS_RESPONSE_TIMES).unwrap_or_default();
+    let raw_str = std::str::from_utf8(&raw).unwrap_or("[]");
+    serde_json::from_str(raw_str).map_err(anyhow::Error::msg)
 }
