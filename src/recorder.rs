@@ -53,6 +53,11 @@ pub fn enable_http_analytics(req: &Request) -> Record {
 }
 
 impl Record {
+    pub fn set_http_status_code(&mut self, s: u16) -> &mut Record {
+        self.http_status_code = s;
+        self
+    }
+
     fn set_execution_status(&mut self, s: String) -> &mut Record {
         self.execution_status = s;
         self
@@ -93,12 +98,12 @@ pub fn collect_metric(record: &Record) -> Result<()> {
 pub fn store_response_time_metric(store: &Store, record: &Record) -> Result<()> {
     let raw = store
         .get(consts::LAST_N_SUCCESS_RESPONSE_TIMES)
-        .unwrap_or_default();
-    let raw_str = std::str::from_utf8(&raw).unwrap_or("[]");
-    let mut response_times_ms_vec: Vec<i64> = serde_json::from_str(raw_str).unwrap();
+        .unwrap_or("[]".as_bytes().to_vec());
+    let raw_str = std::str::from_utf8(&raw).unwrap();
+    let mut response_times_ns_vec: Vec<i64> = serde_json::from_str(raw_str).unwrap();
 
-    response_times_ms_vec.push(record.execution_time.num_milliseconds());
-    let raw_str = serde_json::to_string(&response_times_ms_vec)?;
+    response_times_ns_vec.push(record.execution_time.num_microseconds().unwrap_or(0));
+    let raw_str = serde_json::to_string(&response_times_ns_vec)?;
 
     store
         .set(consts::LAST_N_SUCCESS_RESPONSE_TIMES, raw_str)
@@ -128,11 +133,8 @@ pub fn increment_total_count(store: &Store) -> Result<()> {
 }
 
 pub fn increment_key(store: &Store, key: impl AsRef<str>) -> Result<()> {
-    let value = store.get(&key)?;
-    let count: i32 = std::str::from_utf8(&value)
-        .unwrap_or("0")
-        .parse()
-        .unwrap_or(0);
+    let value = store.get(&key).unwrap_or("0".as_bytes().to_vec());
+    let count: i32 = std::str::from_utf8(&value).unwrap().parse().unwrap_or(0);
     store
         .set(key, format!("{}", count + 1))
         .map_err(anyhow::Error::msg)
