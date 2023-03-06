@@ -1,17 +1,9 @@
+use crate::consts;
 use anyhow::Result;
 use chrono::{DateTime, Duration, Utc};
 use derive_builder::Builder;
 use spin_sdk::http::Request;
 use spin_sdk::key_value::Store;
-use std::collections::HashMap;
-
-const TOTAL_REQUESTS: &str = "total_requests";
-const TOTAL_SUCCESSFUL: &str = "total_successful";
-const TOTAL_SERVER_ERROR: &str = "total_server_error";
-const TOTAL_AUTH_N_ERROR: &str = "total_auth_n_error";
-const TOTAL_AUTH_Z_ERROR: &str = "total_auth_z_error";
-const LAST_N_SUCCESS_RESPONSE_TIMES: &str = "last_n_success_response_times";
-const PERCENTILE_P95: &str = "percentile_p95";
 
 /// Represents a Record
 #[derive(Builder, Clone, Debug)]
@@ -99,7 +91,9 @@ pub fn collect_metric(record: &Record) -> Result<()> {
 }
 
 pub fn store_response_time_metric(store: &Store, record: &Record) -> Result<()> {
-    let raw = store.get(LAST_N_SUCCESS_RESPONSE_TIMES).unwrap_or_default();
+    let raw = store
+        .get(consts::LAST_N_SUCCESS_RESPONSE_TIMES)
+        .unwrap_or_default();
     let raw_str = std::str::from_utf8(&raw).unwrap_or("[]");
     let mut response_times_ms_vec: Vec<i64> = serde_json::from_str(raw_str).unwrap();
 
@@ -107,7 +101,7 @@ pub fn store_response_time_metric(store: &Store, record: &Record) -> Result<()> 
     let raw_str = serde_json::to_string(&response_times_ms_vec)?;
 
     store
-        .set(LAST_N_SUCCESS_RESPONSE_TIMES, raw_str)
+        .set(consts::LAST_N_SUCCESS_RESPONSE_TIMES, raw_str)
         .map_err(anyhow::Error::msg)
 }
 
@@ -115,22 +109,22 @@ pub fn store_p95(store: Store, response_times: Vec<i64>) -> Result<()> {
     let index = 95 / 100 * response_times.len();
     let x = response_times.get(index - 1).unwrap();
     store
-        .set(PERCENTILE_P95, format!("{}", x))
+        .set(consts::PERCENTILE_P95, format!("{}", x))
         .map_err(anyhow::Error::msg)
 }
 
 pub fn increment_response_type(store: &Store, record: &Record) -> Result<()> {
     match record.http_status_code {
-        200 => increment_key(store, TOTAL_SUCCESSFUL),
-        401 => increment_key(store, TOTAL_AUTH_N_ERROR),
-        403 => increment_key(store, TOTAL_AUTH_Z_ERROR),
-        500 => increment_key(store, TOTAL_SERVER_ERROR),
+        200 => increment_key(store, consts::TOTAL_SUCCESSFUL),
+        401 => increment_key(store, consts::TOTAL_AUTH_N_ERROR),
+        403 => increment_key(store, consts::TOTAL_AUTH_Z_ERROR),
+        500 => increment_key(store, consts::TOTAL_SERVER_ERROR),
         _ => Ok(()),
     }
 }
 
 pub fn increment_total_count(store: &Store) -> Result<()> {
-    increment_key(store, TOTAL_REQUESTS)
+    increment_key(store, consts::TOTAL_REQUESTS)
 }
 
 pub fn increment_key(store: &Store, key: impl AsRef<str>) -> Result<()> {
@@ -142,40 +136,4 @@ pub fn increment_key(store: &Store, key: impl AsRef<str>) -> Result<()> {
     store
         .set(key, format!("{}", count + 1))
         .map_err(anyhow::Error::msg)
-}
-
-// getters
-pub fn get_analytics_data(store: &Store) -> Result<HashMap<&str, i64>> {
-    let mut data: HashMap<&str, i64> = HashMap::new();
-    data.insert(TOTAL_SUCCESSFUL, get_i64(store, TOTAL_SUCCESSFUL).unwrap());
-    data.insert(
-        TOTAL_AUTH_N_ERROR,
-        get_i64(store, TOTAL_AUTH_N_ERROR).unwrap(),
-    );
-    data.insert(
-        TOTAL_AUTH_Z_ERROR,
-        get_i64(store, TOTAL_AUTH_Z_ERROR).unwrap(),
-    );
-    data.insert(
-        TOTAL_SERVER_ERROR,
-        get_i64(store, TOTAL_SERVER_ERROR).unwrap(),
-    );
-
-    Ok(data)
-}
-
-pub fn get_p95(store: &Store) -> Result<i64> {
-    get_i64(store, PERCENTILE_P95)
-}
-
-pub fn get_i64(store: &Store, key: impl AsRef<str>) -> Result<i64> {
-    let raw = store.get(key).unwrap_or_default();
-    let raw_str = std::str::from_utf8(&raw).unwrap_or("-1");
-    raw_str.parse().map_err(anyhow::Error::msg)
-}
-
-pub fn get_response_time_metric(store: &Store) -> Result<Vec<i64>> {
-    let raw = store.get(LAST_N_SUCCESS_RESPONSE_TIMES).unwrap_or_default();
-    let raw_str = std::str::from_utf8(&raw).unwrap_or("[]");
-    serde_json::from_str(raw_str).map_err(anyhow::Error::msg)
 }
