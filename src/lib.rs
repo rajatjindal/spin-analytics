@@ -3,7 +3,6 @@ pub mod consts;
 pub mod recorder;
 use anyhow::Result;
 pub use spin_analytics_macro::*;
-use spin_sdk::http::{Request, Response};
 use spin_sdk::key_value::Store;
 
 pub fn get_html() -> Result<String> {

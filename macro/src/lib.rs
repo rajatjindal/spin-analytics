@@ -15,17 +15,12 @@ pub fn http_component_with_analytics(_attr: TokenStream, item: TokenStream) -> T
             let xy = req.try_into().expect("cannot convert from Spin HTTP request");
             let mut recorder = enable_http_analytics(&xy);
             fn handle_http_analytics(_: Request) -> Result<Response>{
-                println!("hello there");
                 Ok(http::Response::builder()
                 .status(200)
-                .header("foo", "bar")
                 .body(Some(get_html().unwrap().into()))?)
             }
 
             #func
-
-
-            println!("path is {}", xy.uri().path());
 
             let result = match xy.uri().path() {
                 "/_analytics" => handle_http_analytics(xy),
@@ -36,13 +31,11 @@ pub fn http_component_with_analytics(_attr: TokenStream, item: TokenStream) -> T
                 Ok(resp) => {
                     let code: u16 = resp.status().as_u16();
                     recorder.set_http_status_code(code);
-                    println!("from inside resp aa");
                     resp.try_into().expect("cannot convert to Spin HTTP response")
                 },
                 Err(e) => {
                     println!("from inside error");
                     let body = e.to_string();
-                        eprintln!("Handler returned an error: {}", body);
                        spin_http::Response {
                             status: 500,
                             headers: None,
