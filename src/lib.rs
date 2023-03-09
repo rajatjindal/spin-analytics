@@ -5,7 +5,7 @@ use anyhow::Result;
 pub use spin_analytics_macro::*;
 use spin_sdk::key_value::Store;
 
-pub fn get_html() -> Result<String> {
+pub fn get_analytics_report() -> Result<String> {
     let store_result = Store::open("default");
     let store = match store_result {
         Ok(store) => store,

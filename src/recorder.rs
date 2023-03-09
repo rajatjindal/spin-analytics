@@ -34,7 +34,7 @@ pub struct Record {
     execution_time: Duration,
 }
 
-pub fn enable_http_analytics(req: &Request) -> Record {
+pub fn init_http_analytics(req: &Request) -> Record {
     let x = RecordBuilder::default()
         .trigger_type("http".to_string())
         .http_method(req.method().to_string())

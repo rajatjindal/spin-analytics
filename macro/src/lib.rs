@@ -9,24 +9,29 @@ pub fn http_component_with_analytics(_attr: TokenStream, item: TokenStream) -> T
     quote!(
         #[http_component]
         fn handle_http_request_mine(req: spin_http::Request) -> Result<spin_http::Response> {
-            use spin_analytics::recorder::enable_http_analytics;
-            use spin_analytics::get_html;
+            use spin_analytics::recorder::init_http_analytics;
+            use spin_analytics::get_analytics_report;
             use anyhow::anyhow;
-            let xy = req.try_into().expect("cannot convert from Spin HTTP request");
-            let mut recorder = enable_http_analytics(&xy);
+
+            let incoming_req = req.try_into().expect("cannot convert from Spin HTTP request");
+
+            // the recording is done automatically inside `drop` function for `recorder`
+            let mut recorder = init_http_analytics(&incoming_req);
+
+            // called when /_analytics is called
             fn handle_http_analytics(_: Request) -> Result<Response>{
                 Ok(http::Response::builder()
                 .status(200)
-                .body(Some(get_html().unwrap().into()))?)
+                .body(Some(get_analytics_report().unwrap().into()))?)
             }
 
             #func
 
-            let result = match xy.uri().path() {
-                "/_analytics" => handle_http_analytics(xy),
-                _ => #func_name(xy),
+            let result = match incoming_req.uri().path() {
+                "/_analytics" => handle_http_analytics(incoming_req),
+                _ => #func_name(incoming_req),
             };
-            // let result = #func_name(xy);
+
             let a = match result {
                 Ok(resp) => {
                     let code: u16 = resp.status().as_u16();
@@ -34,7 +39,6 @@ pub fn http_component_with_analytics(_attr: TokenStream, item: TokenStream) -> T
                     resp.try_into().expect("cannot convert to Spin HTTP response")
                 },
                 Err(e) => {
-                    println!("from inside error");
                     let body = e.to_string();
                        spin_http::Response {
                             status: 500,
